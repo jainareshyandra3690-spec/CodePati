@@ -1,0 +1,233 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Difficulty {
+  BEGINNER
+  MEDIUM
+  ADVANCED
+}
+
+enum ProgramStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum SubmissionType {
+  NEW_PROGRAM
+  ALTERNATIVE_SOLUTION
+  EXPLANATION
+  CORRECTION
+  ALGORITHM
+  LANGUAGE_IMPLEMENTATION
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REQUIRES_CHANGES
+}
+
+model User {
+  id                  String       @id @default(cuid())
+  googleId            String?      @unique
+  name                String?
+  email               String?      @unique
+  emailVerified       DateTime?
+  image               String?
+  profileImage        String?
+  role                Role         @default(USER)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  accounts             Account[]
+  sessions             Session[]
+  programs             Program[]             @relation("CreatedPrograms")
+  submissions          Submission[]          @relation("UserSubmissions")
+  reviewedSubmissions  Submission[]          @relation("ReviewedSubmissions")
+  alternativeSolutions AlternativeSolution[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  programs    Program[]
+  submissions Submission[]
+}
+
+model Language {
+  id                  String               @id @default(cuid())
+  name                String
+  slug                String               @unique
+  fileExtension       String
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  programLanguages     ProgramLanguage[]
+  submissionLanguages  SubmissionLanguage[]
+  alternativeSolutions AlternativeSolution[]
+}
+
+model Program {
+  id                String            @id @default(cuid())
+  title             String
+  slug              String            @unique
+  problemStatement  String            @db.Text
+  inputDescription  String?           @db.Text
+  outputDescription String?           @db.Text
+  examples          String?           @db.Text
+  explanation       String?           @db.Text
+  algorithm         String?           @db.Text
+  timeComplexity    String?
+  spaceComplexity   String?
+  difficulty        Difficulty        @default(BEGINNER)
+  status            ProgramStatus     @default(DRAFT)
+  categoryId        String
+  category          Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdById       String?
+  createdBy         User?             @relation("CreatedPrograms", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  languages            ProgramLanguage[]
+  submissions          Submission[]
+  alternativeSolutions AlternativeSolution[]
+}
+
+model ProgramLanguage {
+  id         String   @id @default(cuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  languageId String
+  language   Language @relation(fields: [languageId], references: [id], onDelete: Restrict)
+  code       String   @db.Text
+  fileName   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([programId, languageId])
+}
+
+model Submission {
+  id             String             @id @default(cuid())
+  userId         String
+  user           User               @relation("UserSubmissions", fields: [userId], references: [id], onDelete: Cascade)
+  programId      String?
+  program        Program?           @relation(fields: [programId], references: [id], onDelete: SetNull)
+  title          String
+  slug           String?
+  description    String?            @db.Text
+  submissionType SubmissionType
+  status         SubmissionStatus   @default(PENDING)
+  adminFeedback  String?            @db.Text
+  reviewedById   String?
+  reviewedBy     User?              @relation("ReviewedSubmissions", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  // Structured fields for NEW_PROGRAM and proposed content
+  categoryId        String?
+  category          Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  difficulty        Difficulty?     @default(BEGINNER)
+  problemStatement  String?         @db.Text
+  inputDescription  String?         @db.Text
+  outputDescription String?         @db.Text
+  examples          String?         @db.Text
+  explanation       String?         @db.Text
+  algorithm         String?         @db.Text
+  timeComplexity    String?
+  spaceComplexity   String?
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  languages           SubmissionLanguage[]
+  alternativeSolution AlternativeSolution?
+}
+
+model SubmissionLanguage {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  languageId   String
+  language     Language   @relation(fields: [languageId], references: [id], onDelete: Restrict)
+  code         String     @db.Text
+  fileName     String?
+
+  @@unique([submissionId, languageId])
+}
+
+model AlternativeSolution {
+  id           String      @id @default(cuid())
+  programId    String
+  program      Program     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  languageId   String
+  language     Language    @relation(fields: [languageId], references: [id], onDelete: Restrict)
+  title        String
+  description  String?     @db.Text
+  code         String      @db.Text
+  fileName     String?
+  authorId     String?
+  author       User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  submissionId String?     @unique
+  submission   Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([programId, languageId])
+}
